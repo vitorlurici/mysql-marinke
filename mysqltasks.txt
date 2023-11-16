@@ -1,0 +1,101 @@
+1) DELIMITER //
+
+CREATE PROCEDURE AumentoSalarial(IN aumento_percentual DECIMAL(5,2))
+BEGIN
+    DECLARE done INT DEFAULT FALSE;
+    DECLARE funcionario_id INT;
+    DECLARE quantidade_vendas DECIMAL(10,2);
+    
+    DECLARE cur CURSOR FOR
+        SELECT id, vendas_mes_atual
+        FROM funcionarios
+        WHERE vendas_mes_atual > 1000;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+    OPEN cur;
+
+    read_loop: LOOP
+        FETCH cur INTO funcionario_id, quantidade_vendas;
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+
+        UPDATE funcionarios
+        SET salario = salario * (1 + aumento_percentual / 100)
+        WHERE id = funcionario_id;
+    END LOOP;
+
+    CLOSE cur;
+END //
+
+DELIMITER ;
+
+2) DELIMITER //
+
+CREATE PROCEDURE calcular_valor_total_pedido(IN pedido_id INT)
+BEGIN
+    DECLARE total_pedido FLOAT;
+
+    SELECT SUM(valor) INTO total_pedido FROM itens_pedido WHERE pedido_id = pedido_id;
+    UPDATE pedidos SET total = total_pedido WHERE id = pedido_id;
+END //
+
+DELIMITER ;
+
+3) DELIMITER //
+
+CREATE PROCEDURE aplicar_aumento_salarial_dependentes(IN X FLOAT)
+BEGIN
+    UPDATE funcionarios SET salario = salario * (1 + X/100) WHERE dependentes < 2;
+END //
+
+DELIMITER ;
+
+4) DELIMITER //
+
+CREATE PROCEDURE aplicar_desconto_ultimo_pedido(IN SP_desconto FLOAT)
+BEGIN
+    DECLARE ultimo_pedido_id INT;
+
+    SELECT id INTO ultimo_pedido_id FROM pedidos WHERE cliente_estado = 'SP' AND pago = false ORDER BY data DESC LIMIT 1;
+    UPDATE pedidos SET total = total * (1 - SP_desconto/100), pago = true WHERE id = ultimo_pedido_id;
+END //
+
+DELIMITER ;
+
+5) DELIMITER //
+
+CREATE PROCEDURE aplicar_aumento_pontuacao(IN X FLOAT)
+BEGIN
+    UPDATE funcionarios SET salario = salario * (1 + X/100) WHERE pontuacao > 8.0;
+END //
+
+DELIMITER ;
+
+6) DELIMITER //
+
+CREATE PROCEDURE calcular_e_gravar_parcelas(IN pedido_id INT, IN quantidade_parcelas INT)
+BEGIN
+    DECLARE total_pedido FLOAT;
+    DECLARE valor_parcela FLOAT;
+
+    SELECT total INTO total_pedido FROM pedidos WHERE id = pedido_id;
+
+    IF quantidade_parcelas = 1 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Pedido à vista';
+    ELSEIF quantidade_parcelas > 3 AND quantidade_parcelas <= 10 THEN
+        SET valor_parcela = total_pedido * 1.1 / quantidade_parcelas;
+    ELSE
+        SET valor_parcela = total_pedido / quantidade_parcelas;
+    END IF;
+
+    DECLARE i INT DEFAULT 1;
+
+    WHILE i <= quantidade_parcelas DO
+        INSERT INTO parcelas (pedido_id, valor) VALUES (pedido_id, valor_parcela);
+        SET i = i + 1;
+    END WHILE;
+END //
+
+DELIMITER ;
